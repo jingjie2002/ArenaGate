@@ -1,0 +1,5 @@
+.gocache/
+tmp/
+*.exe
+*.test
+coverage.out
