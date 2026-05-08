@@ -115,8 +115,41 @@ arenagate_core_errors_total
 arenagate_match_found_total
 ```
 
+## 最小压测
+
+```powershell
+python scripts\gate_ws_benchmark.py
+```
+
+默认会启动 fake CoreRank 和 ArenaGate，并模拟 40 个 WebSocket 客户端完成：
+
+1. WebSocket 连接。
+2. mock auth。
+3. 3 轮 `ping/pong`。
+4. `enqueue_match`。
+5. 接收 `match_found`。
+6. 拉取 `/metrics`。
+
+本轮记录见：[压测与指标记录](benchmark.md)。
+
+成功时能看到类似输出：
+
+```text
+ArenaGate benchmark completed
+clients=40
+auth_success=40
+ping_messages=120
+match_found=40
+metrics_snapshot:
+arenagate_active_sessions 40
+arenagate_connections_total 40
+arenagate_messages_total 200
+arenagate_core_errors_total 0
+arenagate_match_found_total 40
+arenagate_errors_total 0
+```
+
 ## 当前未验证
 
 - 未做 Linux 服务器部署验证。
-- 未做压测。
 - 未做浏览器前端演示。

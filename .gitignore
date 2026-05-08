@@ -1,6 +1,8 @@
 .gocache/
 .gomodcache/
 tmp/
+__pycache__/
+*.pyc
 *.exe
 *.test
 coverage.out
