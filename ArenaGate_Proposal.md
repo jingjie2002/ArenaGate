@@ -4,7 +4,7 @@
 
 ArenaGate 是一个基于 Go 实现的游戏网关与 WebSocket 长连接接入层。
 
-它不是完整游戏服务器，也不是战斗服。它负责玩家进入游戏后的第一道后端入口：连接接入、mock 鉴权、session 管理、心跳、协议校验、限流、转发匹配请求，并把 CoreRank 的匹配结果推送回在线玩家。
+它不是完整游戏服务器，也不是战斗服。它负责玩家进入游戏后的第一道后端入口：连接接入、mock 鉴权、session 管理、心跳、协议校验、限流、运营通知、维护态入场拦截、转发匹配请求，并把 CoreRank 的匹配结果推送回在线玩家。
 
 ## 为什么需要 ArenaGate
 
@@ -44,6 +44,8 @@ WebSocket 玩家
 - mock token 鉴权：`dev-token:{player_id}`。
 - 进程内 session 管理。
 - 心跳 `ping/pong`。
+- 鉴权后运营公告推送 `server_notice`。
+- 维护态 `maintenance_state`，可拒绝新的匹配入场。
 - 消息大小限制。
 - 每 session 简单限流。
 - JSON 消息协议。
@@ -92,6 +94,7 @@ v1 收口以以下结果为准：
 - 真实 CoreRank + Redis 联调 demo 通过。
 - 小规模 WebSocket 压测通过。
 - `/metrics` 可以看到连接、消息、CoreRank 请求、匹配成功和错误指标。
+- 集成测试覆盖运营公告推送和维护态不创建 CoreRank 票据。
 - GitHub Actions CI 通过。
 
 ## 后续演进

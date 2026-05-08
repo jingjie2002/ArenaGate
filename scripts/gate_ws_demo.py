@@ -259,6 +259,7 @@ def main():
     env["CORE_RANK_HTTP"] = f"http://{CORE_ADDR}"
     env["MATCH_POLL_INTERVAL_MS"] = "100"
     env["IDLE_TIMEOUT_MS"] = "10000"
+    env["SERVER_NOTICE"] = "SS25 season is live; ranked queue is open"
 
     subprocess.run(["go", "build", "-o", exe, "./cmd/gateway"], cwd=ROOT, env=env, check=True)
 
@@ -276,9 +277,13 @@ def main():
 
         p1.send_json({"type": "auth", "request_id": "p1-auth", "player_id": "p1", "token": "dev-token:p1"})
         print("p1 authed" if p1.recv_json()["type"] == "authed" else "p1 auth failed")
+        p1_notice = wait_for_type(p1, "server_notice")
+        print(f"p1 notice {p1_notice['message']}")
 
         p2.send_json({"type": "auth", "request_id": "p2-auth", "player_id": "p2", "token": "dev-token:p2"})
         print("p2 authed" if p2.recv_json()["type"] == "authed" else "p2 auth failed")
+        p2_notice = wait_for_type(p2, "server_notice")
+        print(f"p2 notice {p2_notice['message']}")
 
         p1.send_json({"type": "enqueue_match", "request_id": "p1-match", "mmr_score": 1200, "match_mode": "duel"})
         queued = p1.recv_json()

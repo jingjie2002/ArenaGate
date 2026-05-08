@@ -21,3 +21,12 @@ func TestNormalizeEnqueueDefaults(t *testing.T) {
 		t.Fatalf("unexpected default mmr: %d", msg.MMRScore)
 	}
 }
+
+func TestOperationalMessageTypes(t *testing.T) {
+	if TypeServerNotice != "server_notice" {
+		t.Fatalf("unexpected server notice type: %s", TypeServerNotice)
+	}
+	if TypeMaintenance != "maintenance_state" {
+		t.Fatalf("unexpected maintenance type: %s", TypeMaintenance)
+	}
+}

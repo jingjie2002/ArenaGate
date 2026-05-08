@@ -91,6 +91,58 @@ func TestWebSocketMatchFoundFlow(t *testing.T) {
 	}
 }
 
+func TestOperationalNoticeAndMaintenanceBlockMatchEntry(t *testing.T) {
+	core := newFakeMatchCore()
+	server := NewServer(config.Config{
+		AuthTokenPrefix:    "dev-token:",
+		ServerNotice:       "SS25 season is live",
+		MaintenanceEnabled: true,
+		MaintenanceMessage: "ranked queue is temporarily closed",
+		IdleTimeout:        5 * time.Second,
+		MatchPollInterval:  10 * time.Millisecond,
+		MaxMessageBytes:    32768,
+		SessionRateLimit:   20,
+	}, core)
+
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	client := newTestWSClient(t, httpServer.URL, "/ws")
+	defer client.close()
+
+	client.send(t, protocol.Message{
+		Type:      protocol.TypeAuth,
+		RequestID: "auth",
+		PlayerID:  "p1",
+		Token:     "dev-token:p1",
+	})
+	assertResponseType(t, client.recv(t), protocol.TypeAuthed)
+	notice := client.recv(t)
+	assertResponseType(t, notice, protocol.TypeServerNotice)
+	if notice.Message != "SS25 season is live" {
+		t.Fatalf("unexpected server notice: %#v", notice)
+	}
+	maintenance := client.recv(t)
+	assertResponseType(t, maintenance, protocol.TypeMaintenance)
+	if !maintenance.Maintenance || maintenance.Message != "ranked queue is temporarily closed" {
+		t.Fatalf("unexpected maintenance state: %#v", maintenance)
+	}
+
+	client.send(t, protocol.Message{
+		Type:      protocol.TypeEnqueue,
+		RequestID: "enqueue",
+		MMRScore:  1200,
+	})
+	blocked := client.recv(t)
+	assertResponseType(t, blocked, protocol.TypeMaintenance)
+	if !blocked.Maintenance || blocked.Status != "enabled" {
+		t.Fatalf("expected maintenance block, got %#v", blocked)
+	}
+	if core.CreateCount() != 0 {
+		t.Fatalf("maintenance mode should block CoreRank ticket creation")
+	}
+}
+
 type fakeMatchCore struct {
 	mu      sync.Mutex
 	tickets map[string]*coreclient.Ticket
@@ -138,6 +190,12 @@ func (f *fakeMatchCore) CreateTicket(_ context.Context, req coreclient.CreateTic
 
 	copyTicket := *ticket
 	return &copyTicket, nil
+}
+
+func (f *fakeMatchCore) CreateCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.nextID
 }
 
 func (f *fakeMatchCore) GetTicket(_ context.Context, ticketID string) (*coreclient.Ticket, error) {

@@ -35,6 +35,7 @@ func (s *Server) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status":          "ok",
 			"active_sessions": s.sessions.ActiveCount(),
+			"maintenance":     s.cfg.MaintenanceEnabled,
 		})
 	})
 	mux.Handle("/metrics", s.metrics)
@@ -108,17 +109,30 @@ func (s *Server) handleAuth(conn *wsConn, session *Session, msg protocol.Message
 		return errors.New("invalid token for mock auth")
 	}
 	s.sessions.BindPlayer(session, msg.PlayerID)
-	return conn.WriteJSON(protocol.Response{
+	if err := conn.WriteJSON(protocol.Response{
 		Type:      protocol.TypeAuthed,
 		RequestID: msg.RequestID,
 		PlayerID:  msg.PlayerID,
-	})
+	}); err != nil {
+		return err
+	}
+	return s.pushOperationalState(conn, msg.RequestID)
 }
 
 func (s *Server) handleEnqueue(ctx context.Context, conn *wsConn, session *Session, msg protocol.Message) error {
 	playerID, authed := session.Player()
 	if !authed {
 		return errors.New("auth is required before enqueue_match")
+	}
+	if s.cfg.MaintenanceEnabled {
+		return conn.WriteJSON(protocol.Response{
+			Type:        protocol.TypeMaintenance,
+			RequestID:   msg.RequestID,
+			PlayerID:    playerID,
+			Status:      "enabled",
+			Maintenance: true,
+			Message:     s.maintenanceMessage(),
+		})
 	}
 
 	msg = protocol.NormalizeEnqueue(msg)
@@ -285,6 +299,35 @@ func (s *Server) pushMatch(ctx context.Context, conn *wsConn, session *Session, 
 func (s *Server) writeError(conn *wsConn, requestID string, message string) {
 	s.metrics.Error()
 	_ = conn.WriteJSON(protocol.ErrorResponse(requestID, message))
+}
+
+func (s *Server) pushOperationalState(conn *wsConn, requestID string) error {
+	if s.cfg.ServerNotice != "" {
+		if err := conn.WriteJSON(protocol.Response{
+			Type:      protocol.TypeServerNotice,
+			RequestID: requestID,
+			Message:   s.cfg.ServerNotice,
+		}); err != nil {
+			return err
+		}
+	}
+	if s.cfg.MaintenanceEnabled {
+		return conn.WriteJSON(protocol.Response{
+			Type:        protocol.TypeMaintenance,
+			RequestID:   requestID,
+			Status:      "enabled",
+			Maintenance: true,
+			Message:     s.maintenanceMessage(),
+		})
+	}
+	return nil
+}
+
+func (s *Server) maintenanceMessage() string {
+	if s.cfg.MaintenanceMessage != "" {
+		return s.cfg.MaintenanceMessage
+	}
+	return "server is under maintenance"
 }
 
 func isMatched(ticket *coreclient.Ticket) bool {

@@ -33,7 +33,9 @@ python scripts\gate_ws_demo.py
 
 ```text
 p1 authed
+p1 notice SS25 season is live; ranked queue is open
 p2 authed
+p2 notice SS25 season is live; ranked queue is open
 p1 queued ticket_1
 p2 match_found room_demo_1 127.0.0.1:7001
 p1 match_found room_demo_1 127.0.0.1:7001
@@ -45,14 +47,14 @@ ArenaGate WebSocket demo completed
 先确保 Redis 已经启动。可以在 CoreRank 目录执行：
 
 ```powershell
-cd F:\AI编程\简历\CoreRank
+cd path\to\CoreRank
 docker compose up -d corerank-redis
 ```
 
 然后回到 ArenaGate 目录执行：
 
 ```powershell
-cd F:\AI编程\简历\ArenaGate
+cd path\to\ArenaGate
 $env:GOCACHE = Join-Path (Get-Location) ".gocache"
 $env:GOMODCACHE = Join-Path (Get-Location) ".gomodcache"
 python scripts\gate_real_corerank_demo.py
@@ -93,9 +95,25 @@ Invoke-RestMethod http://127.0.0.1:18082/healthz
 ```json
 {
   "active_sessions": 0,
+  "maintenance": false,
   "status": "ok"
 }
 ```
+
+## 运营通知与维护态手动验证
+
+启动网关前设置：
+
+```powershell
+$env:SERVER_NOTICE = "SS25 season is live; ranked queue is open"
+$env:MAINTENANCE_ENABLED = "true"
+$env:MAINTENANCE_MESSAGE = "ranked queue is temporarily closed"
+```
+
+预期：
+
+- 客户端 `auth` 成功后先收到 `authed`，随后收到 `server_notice` 和 `maintenance_state`。
+- 客户端发送 `enqueue_match` 时收到 `maintenance_state`，ArenaGate 不会向 CoreRank 创建匹配票据。
 
 ## 手动指标检查
 

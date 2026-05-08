@@ -22,6 +22,18 @@ v1 没有真实账号系统。客户端必须先发送：
 {"type":"authed","request_id":"1","player_id":"p1"}
 ```
 
+如果服务端配置了运营公告，鉴权成功后还会推送：
+
+```json
+{"type":"server_notice","request_id":"1","message":"SS25 season is live; ranked queue is open"}
+```
+
+如果服务端处于维护态，鉴权成功后还会推送：
+
+```json
+{"type":"maintenance_state","request_id":"1","status":"enabled","maintenance":true,"message":"ranked queue is temporarily closed"}
+```
+
 规则：
 
 ```text
@@ -71,6 +83,19 @@ dev-token:
   "player_id": "p1",
   "ticket_id": "ticket_1",
   "status": "queued"
+}
+```
+
+如果当前网关处于维护态，ArenaGate 不会创建 CoreRank 匹配票据，而是返回：
+
+```json
+{
+  "type": "maintenance_state",
+  "request_id": "3",
+  "player_id": "p1",
+  "status": "enabled",
+  "maintenance": true,
+  "message": "ranked queue is temporarily closed"
 }
 ```
 
@@ -128,6 +153,7 @@ dev-token:
 ## v1 边界
 
 - 当前协议只覆盖接入、心跳和匹配。
+- 当前运营通知只覆盖 `server_notice` 和维护态入场拦截，不做完整公告系统。
 - 当前不包含房间内 ready、移动、技能、战斗帧。
 - 当前不包含真实账号登录。
 - 当前不保证分布式多网关下的 session 迁移。

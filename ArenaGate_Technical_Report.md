@@ -4,7 +4,7 @@
 
 ArenaGate 是一个 Go 游戏网关项目，用于承接玩家 WebSocket 长连接，并与 CoreRank 匹配中台联动。
 
-当前 v1 已完成玩家接入、mock 鉴权、session 管理、心跳、限流、协议处理、CoreRank RESTful 调用、匹配结果推送、metrics、demo、集成测试、GitHub Actions CI 和本机小规模压测。
+当前 v1 已完成玩家接入、mock 鉴权、session 管理、心跳、限流、运营公告推送、维护态入场拦截、协议处理、CoreRank RESTful 调用、匹配结果推送、metrics、demo、集成测试、GitHub Actions CI 和本机小规模压测。
 
 ## 架构
 
@@ -76,6 +76,8 @@ token = dev-token:{player_id}
 
 - `authed`
 - `pong`
+- `server_notice`
+- `maintenance_state`
 - `match_queued`
 - `match_cancelled`
 - `match_status`
@@ -83,6 +85,15 @@ token = dev-token:{player_id}
 - `error`
 
 协议详情见 `docs/protocol.md`。
+
+### 运营通知与维护态
+
+ArenaGate V1+ 增加了两个轻量运营能力：
+
+- `SERVER_NOTICE`：玩家鉴权成功后推送 `server_notice`，用于赛季提示、活动公告或临时通知。
+- `MAINTENANCE_ENABLED` / `MAINTENANCE_MESSAGE`：开启后推送 `maintenance_state`，并在玩家发起 `enqueue_match` 时拒绝新的匹配入场。
+
+这对应真实游戏里的公告、维护、活动入口控制场景，但不把 ArenaGate 扩展成完整公告系统或配置中心。
 
 ### CoreRank 联动
 
@@ -137,6 +148,7 @@ python scripts\gate_ws_demo.py
 - fake CoreRank 启动。
 - ArenaGate 启动。
 - 两个 WebSocket 玩家完成 auth。
+- 鉴权后收到 `server_notice`。
 - 两个玩家发起匹配。
 - 两个玩家收到 `match_found`。
 

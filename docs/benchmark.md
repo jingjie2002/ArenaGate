@@ -30,7 +30,7 @@
 ## 运行命令
 
 ```powershell
-cd F:\AI编程\简历\ArenaGate
+cd path\to\ArenaGate
 $env:GOCACHE = Join-Path (Get-Location) ".gocache"
 $env:GOMODCACHE = Join-Path (Get-Location) ".gomodcache"
 python scripts\gate_ws_benchmark.py
