@@ -61,7 +61,10 @@ def build_binary(root, env, package, output_name):
     suffix = f"{os.getpid()}_{int(time.time() * 1000)}"
     exe_name = f"{output_name}-{suffix}.exe" if os.name == "nt" else f"{output_name}-{suffix}"
     exe_path = os.path.join(tmp_dir, exe_name)
-    subprocess.run(["go", "build", "-o", exe_path, package], cwd=root, env=env, check=True)
+    build_env = env.copy()
+    if root == ROOT:
+        build_env["GOMODCACHE"] = build_env.get("GOMODCACHE", os.path.join(ROOT, ".gomodcache"))
+    subprocess.run(["go", "build", "-o", exe_path, package], cwd=root, env=build_env, check=True)
     return exe_path
 
 

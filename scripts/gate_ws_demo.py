@@ -254,6 +254,7 @@ def main():
 
     env = os.environ.copy()
     env["GOCACHE"] = env.get("GOCACHE", os.path.join(ROOT, ".gocache"))
+    env["GOMODCACHE"] = env.get("GOMODCACHE", os.path.join(ROOT, ".gomodcache"))
     env["GATEWAY_ADDR"] = GATEWAY_ADDR
     env["CORE_RANK_HTTP"] = f"http://{CORE_ADDR}"
     env["MATCH_POLL_INTERVAL_MS"] = "100"

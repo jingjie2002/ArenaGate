@@ -4,6 +4,7 @@
 
 ```powershell
 $env:GOCACHE = Join-Path (Get-Location) ".gocache"
+$env:GOMODCACHE = Join-Path (Get-Location) ".gomodcache"
 go test ./...
 go vet ./...
 go build -o tmp\arenagate-gateway.exe ./cmd/gateway
@@ -53,6 +54,7 @@ docker compose up -d corerank-redis
 ```powershell
 cd F:\AI编程\简历\ArenaGate
 $env:GOCACHE = Join-Path (Get-Location) ".gocache"
+$env:GOMODCACHE = Join-Path (Get-Location) ".gomodcache"
 python scripts\gate_real_corerank_demo.py
 ```
 
