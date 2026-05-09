@@ -9,6 +9,7 @@ import (
 type Config struct {
 	Addr               string
 	CoreRankHTTP       string
+	GameOpsHTTP        string
 	AuthTokenPrefix    string
 	ServerNotice       string
 	MaintenanceEnabled bool
@@ -23,6 +24,7 @@ func FromEnv() Config {
 	return Config{
 		Addr:               getenv("GATEWAY_ADDR", "127.0.0.1:18082"),
 		CoreRankHTTP:       trimRightSlash(getenv("CORE_RANK_HTTP", "http://127.0.0.1:8081")),
+		GameOpsHTTP:        trimRightSlash(getenv("GAMEOPS_HTTP", "")),
 		AuthTokenPrefix:    getenv("AUTH_TOKEN_PREFIX", "dev-token:"),
 		ServerNotice:       getenv("SERVER_NOTICE", ""),
 		MaintenanceEnabled: getenvBool("MAINTENANCE_ENABLED", false),

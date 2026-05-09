@@ -5,28 +5,46 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jingjie2002/ArenaGate/internal/config"
 	"github.com/jingjie2002/ArenaGate/internal/coreclient"
+	"github.com/jingjie2002/ArenaGate/internal/opsclient"
 	"github.com/jingjie2002/ArenaGate/internal/protocol"
 )
 
 type Server struct {
 	cfg      config.Config
 	core     coreclient.Client
+	ops      opsclient.Client
 	sessions *SessionManager
 	metrics  *Metrics
 }
 
+type operationalState struct {
+	Notice             string
+	LoginMaintenance   bool
+	RankedMaintenance  bool
+	MaintenanceMessage string
+}
+
 func NewServer(cfg config.Config, core coreclient.Client) *Server {
-	return &Server{
+	server := &Server{
 		cfg:      cfg,
 		core:     core,
 		sessions: NewSessionManager(),
 		metrics:  NewMetrics(),
 	}
+	if cfg.GameOpsHTTP != "" {
+		server.ops = opsclient.NewHTTPClient(cfg.GameOpsHTTP, 2*time.Second)
+	}
+	return server
+}
+
+func (s *Server) SetOpsClient(ops opsclient.Client) {
+	s.ops = ops
 }
 
 func (s *Server) Handler() http.Handler {
@@ -108,6 +126,9 @@ func (s *Server) handleAuth(conn *wsConn, session *Session, msg protocol.Message
 	if msg.Token != s.cfg.AuthTokenPrefix+msg.PlayerID {
 		return errors.New("invalid token for mock auth")
 	}
+	if message, banned := s.playerBanMessage(context.Background(), msg.PlayerID); banned {
+		return errors.New(message)
+	}
 	s.sessions.BindPlayer(session, msg.PlayerID)
 	if err := conn.WriteJSON(protocol.Response{
 		Type:      protocol.TypeAuthed,
@@ -116,7 +137,7 @@ func (s *Server) handleAuth(conn *wsConn, session *Session, msg protocol.Message
 	}); err != nil {
 		return err
 	}
-	return s.pushOperationalState(conn, msg.RequestID)
+	return s.pushOperationalState(context.Background(), conn, msg.RequestID)
 }
 
 func (s *Server) handleEnqueue(ctx context.Context, conn *wsConn, session *Session, msg protocol.Message) error {
@@ -124,14 +145,18 @@ func (s *Server) handleEnqueue(ctx context.Context, conn *wsConn, session *Sessi
 	if !authed {
 		return errors.New("auth is required before enqueue_match")
 	}
-	if s.cfg.MaintenanceEnabled {
+	if message, banned := s.playerBanMessage(ctx, playerID); banned {
+		return errors.New(message)
+	}
+	state := s.currentOperationalState(ctx)
+	if state.RankedMaintenance {
 		return conn.WriteJSON(protocol.Response{
 			Type:        protocol.TypeMaintenance,
 			RequestID:   msg.RequestID,
 			PlayerID:    playerID,
 			Status:      "enabled",
 			Maintenance: true,
-			Message:     s.maintenanceMessage(),
+			Message:     state.MaintenanceMessage,
 		})
 	}
 
@@ -301,23 +326,24 @@ func (s *Server) writeError(conn *wsConn, requestID string, message string) {
 	_ = conn.WriteJSON(protocol.ErrorResponse(requestID, message))
 }
 
-func (s *Server) pushOperationalState(conn *wsConn, requestID string) error {
-	if s.cfg.ServerNotice != "" {
+func (s *Server) pushOperationalState(ctx context.Context, conn *wsConn, requestID string) error {
+	state := s.currentOperationalState(ctx)
+	if state.Notice != "" {
 		if err := conn.WriteJSON(protocol.Response{
 			Type:      protocol.TypeServerNotice,
 			RequestID: requestID,
-			Message:   s.cfg.ServerNotice,
+			Message:   state.Notice,
 		}); err != nil {
 			return err
 		}
 	}
-	if s.cfg.MaintenanceEnabled {
+	if state.LoginMaintenance {
 		return conn.WriteJSON(protocol.Response{
 			Type:        protocol.TypeMaintenance,
 			RequestID:   requestID,
 			Status:      "enabled",
 			Maintenance: true,
-			Message:     s.maintenanceMessage(),
+			Message:     state.MaintenanceMessage,
 		})
 	}
 	return nil
@@ -328,6 +354,57 @@ func (s *Server) maintenanceMessage() string {
 		return s.cfg.MaintenanceMessage
 	}
 	return "server is under maintenance"
+}
+
+func (s *Server) currentOperationalState(ctx context.Context) operationalState {
+	state := operationalState{
+		Notice:             s.cfg.ServerNotice,
+		LoginMaintenance:   s.cfg.MaintenanceEnabled,
+		RankedMaintenance:  s.cfg.MaintenanceEnabled,
+		MaintenanceMessage: s.maintenanceMessage(),
+	}
+	if s.ops == nil {
+		return state
+	}
+	opsState, err := s.ops.OpsState(ctx)
+	if err != nil {
+		return state
+	}
+	if notice := opsState["announcement"]; notice != "" {
+		state.Notice = notice
+	}
+	if message := opsState["maintenance_message"]; message != "" {
+		state.MaintenanceMessage = message
+	}
+	if value, ok := opsState["login_maintenance"]; ok {
+		state.LoginMaintenance = parseBool(value)
+	}
+	if value, ok := opsState["ranked_maintenance"]; ok {
+		state.RankedMaintenance = parseBool(value)
+	}
+	return state
+}
+
+func (s *Server) playerBanMessage(ctx context.Context, playerID string) (string, bool) {
+	if s.ops == nil {
+		return "", false
+	}
+	state, err := s.ops.PlayerState(ctx, playerID)
+	if err != nil || state == nil || state.Status != "banned" {
+		return "", false
+	}
+	if state.BannedUntil > 0 && state.BannedUntil < time.Now().UnixMilli() {
+		return "", false
+	}
+	if state.BanReason != "" {
+		return "player is banned: " + state.BanReason, true
+	}
+	return "player is banned", true
+}
+
+func parseBool(value string) bool {
+	parsed, err := strconv.ParseBool(value)
+	return err == nil && parsed
 }
 
 func isMatched(ticket *coreclient.Ticket) bool {

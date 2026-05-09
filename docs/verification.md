@@ -105,6 +105,7 @@ Invoke-RestMethod http://127.0.0.1:18082/healthz
 启动网关前设置：
 
 ```powershell
+$env:GAMEOPS_HTTP = "http://127.0.0.1:18090"
 $env:SERVER_NOTICE = "SS25 season is live; ranked queue is open"
 $env:MAINTENANCE_ENABLED = "true"
 $env:MAINTENANCE_MESSAGE = "ranked queue is temporarily closed"
@@ -114,6 +115,7 @@ $env:MAINTENANCE_MESSAGE = "ranked queue is temporarily closed"
 
 - 客户端 `auth` 成功后先收到 `authed`，随后收到 `server_notice` 和 `maintenance_state`。
 - 客户端发送 `enqueue_match` 时收到 `maintenance_state`，ArenaGate 不会向 CoreRank 创建匹配票据。
+- 如果 GameOps 可用，公告、登录维护、排位维护和封禁状态优先来自 GameOps；GameOps 不可用时降级使用环境变量。
 
 ## 手动指标检查
 

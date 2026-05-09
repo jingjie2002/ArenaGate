@@ -28,6 +28,8 @@ v1 没有真实账号系统。客户端必须先发送：
 {"type":"server_notice","request_id":"1","message":"SS25 season is live; ranked queue is open"}
 ```
 
+公告、登录维护、排位维护和封禁状态可以来自 GameOps。GameOps 不可用时，ArenaGate 会降级使用本地环境变量配置。
+
 如果服务端处于维护态，鉴权成功后还会推送：
 
 ```json
@@ -153,7 +155,7 @@ dev-token:
 ## v1 边界
 
 - 当前协议只覆盖接入、心跳和匹配。
-- 当前运营通知只覆盖 `server_notice` 和维护态入场拦截，不做完整公告系统。
+- 当前运营通知覆盖 `server_notice`、维护态入场拦截和 GameOps 封禁状态读取，不做完整公告系统。
 - 当前不包含房间内 ready、移动、技能、战斗帧。
 - 当前不包含真实账号登录。
 - 当前不保证分布式多网关下的 session 迁移。

@@ -18,6 +18,7 @@ import (
 
 	"github.com/jingjie2002/ArenaGate/internal/config"
 	"github.com/jingjie2002/ArenaGate/internal/coreclient"
+	"github.com/jingjie2002/ArenaGate/internal/opsclient"
 	"github.com/jingjie2002/ArenaGate/internal/protocol"
 )
 
@@ -143,6 +144,87 @@ func TestOperationalNoticeAndMaintenanceBlockMatchEntry(t *testing.T) {
 	}
 }
 
+func TestGameOpsStateBlocksMatchEntry(t *testing.T) {
+	core := newFakeMatchCore()
+	server := NewServer(config.Config{
+		AuthTokenPrefix:   "dev-token:",
+		IdleTimeout:       5 * time.Second,
+		MatchPollInterval: 10 * time.Millisecond,
+		MaxMessageBytes:   32768,
+		SessionRateLimit:  20,
+	}, core)
+	server.SetOpsClient(&fakeOpsClient{
+		state: opsclient.State{
+			"announcement":       "GameOps announcement",
+			"ranked_maintenance": "true",
+		},
+	})
+
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	client := newTestWSClient(t, httpServer.URL, "/ws")
+	defer client.close()
+
+	client.send(t, protocol.Message{
+		Type:      protocol.TypeAuth,
+		RequestID: "auth",
+		PlayerID:  "p1",
+		Token:     "dev-token:p1",
+	})
+	assertResponseType(t, client.recv(t), protocol.TypeAuthed)
+	notice := client.recv(t)
+	assertResponseType(t, notice, protocol.TypeServerNotice)
+	if notice.Message != "GameOps announcement" {
+		t.Fatalf("unexpected GameOps notice: %#v", notice)
+	}
+
+	client.send(t, protocol.Message{
+		Type:      protocol.TypeEnqueue,
+		RequestID: "enqueue",
+		MMRScore:  1200,
+	})
+	blocked := client.recv(t)
+	assertResponseType(t, blocked, protocol.TypeMaintenance)
+	if core.CreateCount() != 0 {
+		t.Fatalf("GameOps maintenance should block CoreRank ticket creation")
+	}
+}
+
+func TestGameOpsBannedPlayerCannotAuth(t *testing.T) {
+	core := newFakeMatchCore()
+	server := NewServer(config.Config{
+		AuthTokenPrefix:   "dev-token:",
+		IdleTimeout:       5 * time.Second,
+		MatchPollInterval: 10 * time.Millisecond,
+		MaxMessageBytes:   32768,
+		SessionRateLimit:  20,
+	}, core)
+	server.SetOpsClient(&fakeOpsClient{
+		players: map[string]*opsclient.PlayerState{
+			"p1": {PlayerID: "p1", Status: "banned", BanReason: "abuse_report"},
+		},
+	})
+
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	client := newTestWSClient(t, httpServer.URL, "/ws")
+	defer client.close()
+
+	client.send(t, protocol.Message{
+		Type:      protocol.TypeAuth,
+		RequestID: "auth",
+		PlayerID:  "p1",
+		Token:     "dev-token:p1",
+	})
+	resp := client.recv(t)
+	assertResponseType(t, resp, protocol.TypeError)
+	if resp.Message == "" {
+		t.Fatalf("expected banned error message")
+	}
+}
+
 type fakeMatchCore struct {
 	mu      sync.Mutex
 	tickets map[string]*coreclient.Ticket
@@ -224,6 +306,30 @@ func (f *fakeMatchCore) GetResult(_ context.Context, _ string) (*coreclient.Matc
 	copyResult := *f.result
 	copyResult.PlayerIDs = append([]string(nil), f.result.PlayerIDs...)
 	return &copyResult, nil
+}
+
+type fakeOpsClient struct {
+	state   opsclient.State
+	players map[string]*opsclient.PlayerState
+}
+
+func (f *fakeOpsClient) OpsState(context.Context) (opsclient.State, error) {
+	if f.state == nil {
+		return opsclient.State{}, nil
+	}
+	return f.state, nil
+}
+
+func (f *fakeOpsClient) PlayerState(_ context.Context, playerID string) (*opsclient.PlayerState, error) {
+	if f.players == nil {
+		return &opsclient.PlayerState{PlayerID: playerID, Status: "normal"}, nil
+	}
+	state := f.players[playerID]
+	if state == nil {
+		return &opsclient.PlayerState{PlayerID: playerID, Status: "normal"}, nil
+	}
+	copyState := *state
+	return &copyState, nil
 }
 
 type testWSClient struct {
